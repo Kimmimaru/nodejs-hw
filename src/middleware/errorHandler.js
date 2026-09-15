@@ -5,6 +5,10 @@ export const errorHandler = (err, _req, res, _next) => {
   const message =
     err instanceof HttpError ? err.message || err.name : err.message;
 
+  if (status >= 500) {
+    console.error(err);
+  }
+
   res.status(status).json({
     message,
   });
