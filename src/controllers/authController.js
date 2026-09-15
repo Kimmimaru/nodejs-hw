@@ -1,9 +1,22 @@
 import bcrypt from 'bcrypt';
 import createHttpError from 'http-errors';
+import { isValidObjectId } from 'mongoose';
 
 import { Session } from '../models/session.js';
 import { User } from '../models/user.js';
 import { createSession, setSessionCookies } from '../services/auth.js';
+
+const clearSessionCookies = (res) => {
+  const cookieOptions = {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+  };
+
+  res.clearCookie('sessionId', cookieOptions);
+  res.clearCookie('accessToken', cookieOptions);
+  res.clearCookie('refreshToken', cookieOptions);
+};
 
 export const registerUser = async (req, res) => {
   const { email, password } = req.body;
@@ -50,12 +63,19 @@ export const refreshUserSession = async (req, res) => {
     throw createHttpError(401, 'Session not found');
   }
 
+  if (!isValidObjectId(sessionId)) {
+    throw createHttpError(401, 'Session not found');
+  }
+
   const session = await Session.findOne({ _id: sessionId, refreshToken });
   if (!session) {
     throw createHttpError(401, 'Session not found');
   }
 
   if (new Date() > session.refreshTokenValidUntil) {
+    await Session.deleteOne({ _id: session._id });
+    clearSessionCookies(res);
+
     throw createHttpError(401, 'Session token expired');
   }
 
@@ -69,22 +89,10 @@ export const refreshUserSession = async (req, res) => {
   });
 };
 
-const clearSessionCookies = (res) => {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-  };
-
-  res.clearCookie('sessionId', cookieOptions);
-  res.clearCookie('accessToken', cookieOptions);
-  res.clearCookie('refreshToken', cookieOptions);
-};
-
 export const logoutUser = async (req, res) => {
   const { sessionId } = req.cookies;
 
-  if (sessionId) {
+  if (sessionId && isValidObjectId(sessionId)) {
     await Session.deleteOne({ _id: sessionId });
   }
 
